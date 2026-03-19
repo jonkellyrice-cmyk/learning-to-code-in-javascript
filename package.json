@@ -1,0 +1,45 @@
+{
+  "name": "jon-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "repo:verify": "tsx scripts/repo-engine-scripts/verify_repo.ts",
+    "repo:fingerprint": "tsx scripts/repo-engine-scripts/gen_fingerprint_index.ts",
+    "repo:symbols": "tsx scripts/repo-engine-scripts/gen_symbol_index.ts",
+    "repo:deps": "tsx scripts/repo-engine-scripts/gen_deps_graph.ts",
+    "repo:patchplan": "tsx scripts/repo-engine-scripts/gen_patch_plan.ts",
+    "repo:applypatch": "tsx scripts/repo-engine-scripts/apply_patch.ts",
+    "repo:workflow": "tsx scripts/repo-engine-scripts/workflow_run.ts",
+    "repo:repomap": "tsx scripts/repo-engine-scripts/gen-repo-map.ts",
+    "repo:hidecontracts": "tsx scripts/repo-engine-scripts/hide-root-contracts.ts",
+    "repo:block-functions": "tsx scripts/repo-engine-scripts/gen_block_function_index.ts",
+    "repo:all": "npm run repo:fingerprint && npm run repo:symbols && npm run repo:repomap && npm run repo:deps && npm run repo:verify",
+    "gen:fingerprint-index": "npm run repo:fingerprint",
+    "gen:symbol-index": "npm run repo:symbols",
+    "gen:deps-graph": "npm run repo:deps",
+    "gen:repo-map": "npm run gen:repomap",
+    "gen:patch-plan": "npm run repo:patchplan",
+    "gen:block-function-index": "npm run repo:block-functions",
+    "verify:repo": "npm run repo:verify",
+    "apply:patch": "npm run repo:applypatch",
+    "workflow:run": "npm run repo:workflow"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "openai": "^6.17.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0"
+  }
+}
