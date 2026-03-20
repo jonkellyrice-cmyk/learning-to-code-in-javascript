@@ -1,12 +1,11 @@
-// MDV_BLOCK:BEGIN id="UI.FILE.001" intent="UI boundary: minimal kernel-driven chat UI (threads/messages/composer) with ordered section anchors" kind="file" tags="ui,v0.1,sections"
+// MDV_BLOCK:BEGIN id="UI.FILE.002" intent="UI boundary: general-purpose engine-driven UI for planner/modeler/builder module host with ordered section anchors" kind="file" tags="ui,general-purpose,v0.2,sections"
 
 /**
  * ui/ui.tsx
  * ---------
  * Policy:
  * - UI is a boundary layer (runtime React). It may do runtime work.
- * - UI must not contain domain logic; it dispatches actions to the kernel.
- * - Persistence is executed via storage by applying kernel effects.
+ * - UI must not contain domain logic; it dispatches requests to the engine.
  * - New code is inserted only at the end of the appropriate section.
  */
 
@@ -14,89 +13,237 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-import type { KernelAction, KernelState } from "@/kernel";
-import { applyAction, makeKernelInitialState } from "@/kernel";
-import { applyKernelEffects, loadKernelState } from "@/storage";
+import {
+  engineHandleRequest,
+  type EngineModuleDefinition,
+  type EngineModuleName,
+} from "@/engine";
+import type { KernelState } from "@/kernel";
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.PRIMITIVES.001" intent="Primitives: minimal UI primitives (time/id helpers, kernel dispatch)" kind="section" tags="ui,primitives"
+// MDV_BLOCK:BEGIN id="UI.SECTION.PRIMITIVES.002" intent="Primitives: minimal UI primitives for time, boot, module open, and placeholder module-step execution" kind="section" tags="ui,primitives"
 
-type DispatchResult = { readonly next: KernelState };
+type AppViewState = {
+  readonly kernelState: KernelState | null;
+  readonly modules: readonly EngineModuleDefinition[];
+  readonly activeModuleName: EngineModuleName | null;
+  readonly message: string;
+  readonly isBooting: boolean;
+};
 
-function dispatchAndPersist(prev: KernelState, action: KernelAction): DispatchResult {
-  const res = applyAction(prev, action);
-  void applyKernelEffects(res.effects);
-  return { next: res.state };
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
-// MDV_BLOCK:END id="UI.SECTION.PRIMITIVES.001"
+// MDV_BLOCK:END id="UI.SECTION.PRIMITIVES.002"
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.HELPERS.001" intent="Helpers: intentionally minimal UI helpers (render/layout helpers only)" kind="section" tags="ui,helpers"
-// (none)
-// MDV_BLOCK:END id="UI.SECTION.HELPERS.001"
+// MDV_BLOCK:BEGIN id="UI.SECTION.HELPERS.002" intent="Helpers: intentionally minimal UI helpers (render/layout helpers only)" kind="section" tags="ui,helpers"
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.COMPOSITION.001" intent="Composition: main UI component (kernel-driven)" kind="section" tags="ui,composition"
+function statusLabel(state: KernelState | null): string {
+  if (!state) return "uninitialized";
+  return state.status;
+}
+
+// MDV_BLOCK:END id="UI.SECTION.HELPERS.002"
+
+// MDV_BLOCK:BEGIN id="UI.SECTION.COMPOSITION.002" intent="Composition: main UI component for planner/modeler/builder engine host" kind="section" tags="ui,composition"
 
 export function AppUI(): JSX.Element {
-  const [state, setState] = useState<KernelState | null>(null);
+  const [viewState, setViewState] = useState<AppViewState>({
+    kernelState: null,
+    modules: [],
+    activeModuleName: null,
+    message: "Booting engine…",
+    isBooting: true,
+  });
 
-  // Boot: load persisted state or create a new one.
   useEffect(() => {
-    const persisted = loadKernelState();
-    if (persisted) {
-      setState(persisted);
-      return;
+    let cancelled = false;
+
+    async function boot(): Promise<void> {
+      const response = await engineHandleRequest({
+        command: "ENGINE_BOOT",
+        now: nowIso() as any,
+      });
+
+      if (cancelled) return;
+
+      setViewState({
+        kernelState: response.kernelState,
+        modules: response.modules,
+        activeModuleName: response.activeModuleName,
+        message: response.message,
+        isBooting: false,
+      });
     }
-    const init = makeKernelInitialState(new Date().toISOString() as any);
-    void applyKernelEffects([{ type: "PERSIST_STATE", state: init } as any]);
-    setState(init);
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const viewModel = useMemo(() => {
-    // Keep UI generic: no domain selectors here in the template.
-    return { ready: Boolean(state) };
-  }, [state]);
+    return {
+      ready: viewState.kernelState !== null,
+      status: statusLabel(viewState.kernelState),
+      moduleCount: viewState.modules.length,
+      activeModuleName: viewState.activeModuleName,
+      message: viewState.message,
+      lastUpdatedAt: viewState.kernelState?.lastUpdatedAt ?? null,
+      lastError: viewState.kernelState?.lastError ?? null,
+      activeModuleId: viewState.kernelState?.activeModuleId ?? null,
+      registeredModuleCount: viewState.kernelState?.moduleOrder.length ?? 0,
+    };
+  }, [viewState]);
 
-  function dispatch(action: KernelAction): void {
-    setState((prev) => {
-      if (!prev) return prev;
-      return dispatchAndPersist(prev, action).next;
+  async function handleOpenModule(moduleName: EngineModuleName): Promise<void> {
+    if (!viewState.kernelState) return;
+
+    const response = await engineHandleRequest({
+      command: "ENGINE_OPEN_MODULE",
+      now: nowIso() as any,
+      kernelState: viewState.kernelState,
+      moduleName,
+    });
+
+    setViewState({
+      kernelState: response.kernelState,
+      modules: response.modules,
+      activeModuleName: response.activeModuleName,
+      message: response.message,
+      isBooting: false,
     });
   }
 
-  if (!viewModel.ready) {
-    return <div style={{ padding: 16 }}>Loading…</div>;
+  async function handleRunModuleStep(moduleName: EngineModuleName): Promise<void> {
+    if (!viewState.kernelState) return;
+
+    const response = await engineHandleRequest({
+      command: "ENGINE_RUN_MODULE_STEP",
+      now: nowIso() as any,
+      kernelState: viewState.kernelState,
+      moduleName,
+    });
+
+    setViewState({
+      kernelState: response.kernelState,
+      modules: response.modules,
+      activeModuleName: response.activeModuleName,
+      message: response.message,
+      isBooting: false,
+    });
+  }
+
+  if (viewState.isBooting || !viewModel.ready) {
+    return <div style={{ padding: 16 }}>Booting engine…</div>;
   }
 
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>Template UI</div>
+    <div
+      style={{
+        padding: 16,
+        fontFamily: "system-ui, sans-serif",
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 24, marginBottom: 4 }}>
+          Learning-to-Code App Host
+        </div>
 
-      <div style={{ opacity: 0.7, marginBottom: 12 }}>
-        This is a minimal kernel-driven UI boundary. Replace with your app’s UI.
+        <div style={{ opacity: 0.75 }}>
+          Planner → Modeler → Builder over a general-purpose kernel + engine host.
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          onClick={() =>
-            dispatch({
-              type: "NOOP" as any,
-            })
-          }
-        >
-          Dispatch Example
-        </button>
+      <div
+        style={{
+          border: "1px solid #d0d7de",
+          borderRadius: 8,
+          padding: 12,
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        <div style={{ fontWeight: 600 }}>Kernel / Engine Status</div>
+
+        <div>Status: {viewModel.status}</div>
+        <div>Registered Modules: {viewModel.registeredModuleCount}</div>
+        <div>Active Module: {viewModel.activeModuleName ?? "none"}</div>
+        <div>Active Module Id: {viewModel.activeModuleId ? String(viewModel.activeModuleId) : "none"}</div>
+        <div>Last Updated: {viewModel.lastUpdatedAt ?? "none"}</div>
+        <div>Last Error: {viewModel.lastError ?? "none"}</div>
+
+        <div style={{ marginTop: 8 }}>
+          <strong>Message:</strong> {viewModel.message}
+        </div>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid #d0d7de",
+          borderRadius: 8,
+          padding: 12,
+          display: "grid",
+          gap: 12,
+        }}
+      >
+        <div style={{ fontWeight: 600 }}>
+          Modules ({viewModel.moduleCount})
+        </div>
+
+        {viewState.modules.map((mod) => {
+          const isActive = viewModel.activeModuleName === mod.name;
+
+          return (
+            <div
+              key={mod.name}
+              style={{
+                border: "1px solid #d0d7de",
+                borderRadius: 8,
+                padding: 12,
+                display: "grid",
+                gap: 8,
+                background: isActive ? "#f6f8fa" : "#ffffff",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{mod.title}</div>
+                  <div style={{ opacity: 0.75, fontSize: 14 }}>{mod.description}</div>
+                </div>
+
+                <div style={{ whiteSpace: "nowrap", fontSize: 14 }}>
+                  status: {mod.status}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => void handleOpenModule(mod.name)}>
+                  Open
+                </button>
+
+                <button onClick={() => void handleRunModuleStep(mod.name)}>
+                  Run Placeholder Step
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// MDV_BLOCK:END id="UI.SECTION.COMPOSITION.001"
+// MDV_BLOCK:END id="UI.SECTION.COMPOSITION.002"
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.EXPORTS.001" intent="Exports: explicit public surface for UI domain" kind="section" tags="ui,exports"
+// MDV_BLOCK:BEGIN id="UI.SECTION.EXPORTS.002" intent="Exports: explicit public surface for UI domain" kind="section" tags="ui,exports"
 
 // NOTE: exports are defined inline above (AppUI).
 // Adapter (index.ts) controls public exposure.
 
-// MDV_BLOCK:END id="UI.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="UI.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="UI.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/jon-orchestrator/src/ui/ui.tsx file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/ui/ui.tsx
+// MDV_BLOCK:END id="UI.FILE.002"
