@@ -10,7 +10,12 @@ import type {
 
 // primitives
 
-export const TYPEGEN_MODULE_ID = "typegen" as KernelModuleId;
+export const TYPEGEN_MODULE_NAME = "type-maker";
+export const TYPEGEN_MODULE_ID = "type-maker" as KernelModuleId;
+export const TYPEGEN_MODULE_TITLE = "Type Maker";
+export const TYPEGEN_MODULE_DESCRIPTION =
+  "Builder module for creating kernel and module types with enforced consistency.";
+export const TYPEGEN_MODULE_STATUS = "ready" as const;
 
 export type TypegenSection = "primitives" | "helpers" | "composition";
 
@@ -81,6 +86,17 @@ export type TypegenCommand =
 
 export type TypegenHandleResult = {
   readonly nextState: TypegenDraftState;
+};
+
+export type TypegenViewModel = {
+  readonly moduleName: typeof TYPEGEN_MODULE_NAME;
+  readonly moduleTitle: typeof TYPEGEN_MODULE_TITLE;
+  readonly moduleDescription: typeof TYPEGEN_MODULE_DESCRIPTION;
+  readonly moduleStatus: typeof TYPEGEN_MODULE_STATUS;
+  readonly draft: TypegenTypeDefinition;
+  readonly generatedCode: string;
+  readonly validationErrors: readonly string[];
+  readonly isValid: boolean;
 };
 
 // helpers
@@ -364,5 +380,31 @@ export function selectTypegenValidationErrors(
 ): readonly string[] {
   return state.lastValidationErrors;
 }
+
+export function selectTypegenViewModel(
+  state: TypegenDraftState,
+): TypegenViewModel {
+  return {
+    moduleName: TYPEGEN_MODULE_NAME,
+    moduleTitle: TYPEGEN_MODULE_TITLE,
+    moduleDescription: TYPEGEN_MODULE_DESCRIPTION,
+    moduleStatus: TYPEGEN_MODULE_STATUS,
+    draft: state.currentDraft,
+    generatedCode: state.generatedCode,
+    validationErrors: state.lastValidationErrors,
+    isValid: state.lastValidationErrors.length === 0,
+  };
+}
+
+export const TYPEGEN_MODULE = {
+  name: TYPEGEN_MODULE_NAME,
+  moduleId: TYPEGEN_MODULE_ID,
+  title: TYPEGEN_MODULE_TITLE,
+  description: TYPEGEN_MODULE_DESCRIPTION,
+  status: TYPEGEN_MODULE_STATUS,
+  makeInitialState: makeInitialTypegenState,
+  handleCommand: handleTypegenCommand,
+  selectViewModel: selectTypegenViewModel,
+} as const;
 
 // exports
