@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.FILE.001" intent="Kernel invariants slice: v0.1 state validation rules (pure) with ordered section anchors" kind="file" tags="kernel,invariants,v0.1,sections"
+// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.FILE.002" intent="Kernel invariants slice: general-purpose kernel hosting state validation rules (pure) with ordered section anchors" kind="file" tags="kernel,invariants,general-purpose,v0.2,sections"
 
 /**
  * kernel/invariants/invariants.ts
@@ -13,34 +13,65 @@
 import type { KernelState, Result } from "../types";
 import { KERNEL_SCHEMA_VERSION } from "../types";
 
-// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.PRIMITIVES.001" intent="Primitives: minimal state validation (returns Result<void, string[]>)" kind="section" tags="kernel,invariants,primitives"
+// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.PRIMITIVES.002" intent="Primitives: minimal general-purpose kernel hosting state validation (returns Result<void, string[]>)" kind="section" tags="kernel,invariants,primitives"
 
 export function validateState(state: KernelState): Result<void, readonly string[]> {
   const errors: string[] = [];
 
   if (state.schemaVersion !== KERNEL_SCHEMA_VERSION) {
-    errors.push(`schemaVersion mismatch: expected ${KERNEL_SCHEMA_VERSION}, got ${state.schemaVersion}`);
+    errors.push(
+      `schemaVersion mismatch: expected ${KERNEL_SCHEMA_VERSION}, got ${state.schemaVersion}`,
+    );
   }
 
-  if (errors.length > 0) return { ok: false, error: errors };
+  if (
+    state.activeModuleId !== null &&
+    !(String(state.activeModuleId) in state.modulesById)
+  ) {
+    errors.push(
+      `activeModuleId is not registered: ${String(state.activeModuleId)}`,
+    );
+  }
+
+  const seenModuleIds = new Set<string>();
+
+  for (const moduleId of state.moduleOrder) {
+    const moduleKey = String(moduleId);
+
+    if (seenModuleIds.has(moduleKey)) {
+      errors.push(`duplicate module id in moduleOrder: ${moduleKey}`);
+      continue;
+    }
+
+    seenModuleIds.add(moduleKey);
+
+    if (!(moduleKey in state.modulesById)) {
+      errors.push(`moduleOrder references missing module: ${moduleKey}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, error: errors };
+  }
+
   return { ok: true, value: undefined };
 }
 
-// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.PRIMITIVES.001"
+// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.PRIMITIVES.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.HELPERS.001" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,invariants,helpers"
+// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.HELPERS.002" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,invariants,helpers"
 // (none)
-// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.HELPERS.001"
+// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.HELPERS.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.COMPOSITION.001" intent="Composition: higher-level invariant compositions (none yet)" kind="section" tags="kernel,invariants,composition"
+// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.COMPOSITION.002" intent="Composition: higher-level invariant compositions (none yet)" kind="section" tags="kernel,invariants,composition"
 // (none)
-// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.COMPOSITION.001"
+// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.COMPOSITION.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.EXPORTS.001" intent="Exports: explicit public surface for invariants slice" kind="section" tags="kernel,invariants,exports"
+// MDV_BLOCK:BEGIN id="KERNEL.INVARIANTS.SECTION.EXPORTS.002" intent="Exports: explicit public surface for invariants slice" kind="section" tags="kernel,invariants,exports"
 
 // NOTE: exports are defined inline above.
 // This anchor exists for future controlled re-exports/deprecations.
 
-// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="KERNEL.INVARIANTS.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="KERNEL.INVARIANTS.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/kernel/invariants/invariants.ts
+// MDV_BLOCK:END id="KERNEL.INVARIANTS.FILE.002"

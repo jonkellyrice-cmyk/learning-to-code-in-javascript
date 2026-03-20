@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.FILE.001" intent="Kernel actions slice: v0.1 action vocabulary for threads/messages with ordered section anchors" kind="file" tags="kernel,actions,v0.1,sections"
+// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.FILE.002" intent="Kernel actions slice: general-purpose action vocabulary for kernel module hosting and orchestration with ordered section anchors" kind="file" tags="kernel,actions,general-purpose,v0.2,sections"
 
 /**
  * kernel/actions/actions.ts
@@ -9,55 +9,62 @@
  * - Dependency flow is top -> bottom (no block depends on blocks below it).
  */
 
-import type { ISODateString, EntityId, ItemId, ActorRole } from "../types";
+import type {
+  ISODateString,
+  KernelEvent,
+  KernelLogEntry,
+  KernelModuleId,
+  KernelStatus,
+} from "../types";
 
-// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.PRIMITIVES.001" intent="Primitives: minimal KernelAction union for v0.1 generic entity/item operations" kind="section" tags="kernel,actions,primitives"
+// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.PRIMITIVES.002" intent="Primitives: minimal general-purpose KernelAction union for kernel hosting, orchestration, logging, and event dispatch" kind="section" tags="kernel,actions,primitives"
 
 export type KernelAction =
   | {
-      readonly type: "ENTITY_CREATE";
-      readonly entityId: EntityId;
+      readonly type: "KERNEL_SET_STATUS";
+      readonly status: KernelStatus;
       readonly now: ISODateString;
     }
   | {
-      readonly type: "ENTITY_DELETE";
-      readonly entityId: EntityId;
+      readonly type: "KERNEL_SET_ACTIVE_MODULE";
+      readonly moduleId: KernelModuleId | null;
       readonly now: ISODateString;
     }
   | {
-      readonly type: "ENTITY_SET_ACTIVE";
-      readonly entityId: EntityId | null;
+      readonly type: "KERNEL_REGISTER_MODULE";
+      readonly moduleId: KernelModuleId;
       readonly now: ISODateString;
     }
   | {
-      readonly type: "ITEM_APPEND";
-      readonly itemId: ItemId;
-      readonly entityId: EntityId;
-      readonly role: ActorRole;
-      readonly content: string;
+      readonly type: "KERNEL_RECORD_ERROR";
+      readonly message: string;
       readonly now: ISODateString;
     }
   | {
-      readonly type: "ITEM_UPDATE";
-      readonly itemId: ItemId;
-      readonly content: string;
+      readonly type: "KERNEL_APPEND_LOG";
+      readonly entry: KernelLogEntry;
+      readonly now: ISODateString;
+    }
+  | {
+      readonly type: "KERNEL_DISPATCH_EVENT";
+      readonly event: KernelEvent;
       readonly now: ISODateString;
     };
 
-// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.PRIMITIVES.001"
+// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.PRIMITIVES.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.HELPERS.001" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,actions,helpers"
+// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.HELPERS.002" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,actions,helpers"
 // (none)
-// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.HELPERS.001"
+// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.HELPERS.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.COMPOSITION.001" intent="Composition: higher-level action composition helpers (none yet)" kind="section" tags="kernel,actions,composition"
+// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.COMPOSITION.002" intent="Composition: higher-level action composition helpers (none yet)" kind="section" tags="kernel,actions,composition"
 // (none)
-// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.COMPOSITION.001"
+// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.COMPOSITION.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.EXPORTS.001" intent="Exports: explicit public surface for actions slice" kind="section" tags="kernel,actions,exports"
+// MDV_BLOCK:BEGIN id="KERNEL.ACTIONS.SECTION.EXPORTS.002" intent="Exports: explicit public surface for actions slice" kind="section" tags="kernel,actions,exports"
 
 // NOTE: exports are defined inline above (KernelAction).
 
-// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="KERNEL.ACTIONS.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="KERNEL.ACTIONS.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/jon-orchestrator/src/kernel/actions/actions.ts file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/kernel/actions/actions.ts
+// MDV_BLOCK:END id="KERNEL.ACTIONS.FILE.002"

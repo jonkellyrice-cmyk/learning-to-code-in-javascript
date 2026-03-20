@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.FILE.001" intent="Kernel selectors slice: v0.1 read-only selectors for threads/messages with ordered section anchors" kind="file" tags="kernel,selectors,v0.1,sections"
+// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.FILE.002" intent="Kernel selectors slice: general-purpose read-only selectors for kernel hosting state with ordered section anchors" kind="file" tags="kernel,selectors,general-purpose,v0.2,sections"
 
 /**
  * kernel/selectors/selectors.ts
@@ -10,45 +10,72 @@
  * - Selectors are pure read-only functions (no mutation, no side effects).
  */
 
-import type { Entity, EntityId, Item, KernelState } from "../types";
+import type { KernelModuleId, KernelState, KernelStatus } from "../types";
 
-// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.PRIMITIVES.001" intent="Primitives: minimal pure selectors for kernel state" kind="section" tags="kernel,selectors,primitives"
+// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.PRIMITIVES.002" intent="Primitives: minimal pure selectors for general-purpose kernel state" kind="section" tags="kernel,selectors,primitives"
 
 export function selectSchemaVersion(state: KernelState): KernelState["schemaVersion"] {
   return state.schemaVersion;
 }
 
-export function selectActiveEntityId(state: KernelState): EntityId | null {
-  return state.activeEntityId;
+export function selectKernelStatus(state: KernelState): KernelStatus {
+  return state.status;
 }
 
-export function selectEntities(state: KernelState): readonly Entity[] {
-  return state.entityOrder.map((id) => state.entitiesById[String(id)]).filter((e): e is Entity => Boolean(e));
+export function selectActiveModuleId(state: KernelState): KernelModuleId | null {
+  return state.activeModuleId;
 }
 
-export function selectEntityById(state: KernelState, entityId: EntityId): Entity | null {
-  return state.entitiesById[String(entityId)] ?? null;
+export function selectModulesById(state: KernelState): KernelState["modulesById"] {
+  return state.modulesById;
 }
 
-export function selectItemsForEntity(state: KernelState, entityId: EntityId): readonly Item[] {
-  return state.itemsByEntityId[String(entityId)] ?? [];
+export function selectModuleOrder(state: KernelState): readonly KernelModuleId[] {
+  return state.moduleOrder;
 }
 
-// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.PRIMITIVES.001"
+export function selectModuleSliceById(
+  state: KernelState,
+  moduleId: KernelModuleId,
+): unknown {
+  return state.modulesById[String(moduleId)] ?? null;
+}
 
-// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.HELPERS.001" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,selectors,helpers"
+export function selectLastUpdatedAt(state: KernelState): KernelState["lastUpdatedAt"] {
+  return state.lastUpdatedAt;
+}
+
+export function selectLastError(state: KernelState): string | null {
+  return state.lastError;
+}
+
+// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.PRIMITIVES.002"
+
+// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.HELPERS.002" intent="Helpers: intentionally empty (avoid unless zero-runtime and reduces future churn)" kind="section" tags="kernel,selectors,helpers"
 // (none)
-// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.HELPERS.001"
+// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.HELPERS.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.COMPOSITION.001" intent="Composition: higher-level selectors composed from primitives (none yet)" kind="section" tags="kernel,selectors,composition"
-// (none)
-// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.COMPOSITION.001"
+// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.COMPOSITION.002" intent="Composition: higher-level selectors composed from primitives for general-purpose kernel hosting" kind="section" tags="kernel,selectors,composition"
 
-// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.EXPORTS.001" intent="Exports: explicit public surface for selectors slice" kind="section" tags="kernel,selectors,exports"
+export function selectHasActiveModule(state: KernelState): boolean {
+  return state.activeModuleId !== null;
+}
+
+export function selectModuleCount(state: KernelState): number {
+  return state.moduleOrder.length;
+}
+
+export function selectHasError(state: KernelState): boolean {
+  return state.lastError !== null;
+}
+
+// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.COMPOSITION.002"
+
+// MDV_BLOCK:BEGIN id="KERNEL.SELECTORS.SECTION.EXPORTS.002" intent="Exports: explicit public surface for selectors slice" kind="section" tags="kernel,selectors,exports"
 
 // NOTE: exports are defined inline above.
 // This anchor exists for future controlled re-exports/deprecations.
 
-// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="KERNEL.SELECTORS.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="KERNEL.SELECTORS.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/kernel/selectors/selectors.ts
+// MDV_BLOCK:END id="KERNEL.SELECTORS.FILE.002"

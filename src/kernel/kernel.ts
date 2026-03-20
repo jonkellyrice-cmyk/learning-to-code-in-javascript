@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="KERNEL.ROOT.FILE.001" intent="Kernel composition root: pure applyAction reducer, state init, effect planning; composes all kernel slices" kind="file" tags="kernel,root,v0.1,sections"
+// MDV_BLOCK:BEGIN id="KERNEL.ROOT.FILE.002" intent="Kernel composition root: pure applyAction reducer, state init, effect planning; composes general-purpose kernel host slices" kind="file" tags="kernel,root,general-purpose,v0.2,sections"
 
 /**
  * kernel/kernel.ts
@@ -10,44 +10,20 @@
  * - Dependency flow is top -> bottom (no block depends on blocks below it).
  */
 
-import type { ISODateString, KernelModule, KernelState } from "./types";
+import type { ISODateString, KernelEvent, KernelModule, KernelState } from "./types";
 import type { KernelAction } from "./actions";
 import type { KernelEffect } from "./effects";
-import type { KernelEvent } from "./events";
 
 import { makeInitialState } from "./state";
 import { validateState } from "./invariants";
 import { applyKernelActionTransform } from "./transforms";
 
-// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.PRIMITIVES.001" intent="Primitives: local pure primitives used by kernel composition (no IO)" kind="section" tags="kernel,root,primitives"
+// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.PRIMITIVES.002" intent="Primitives: local pure primitives used by kernel composition for general-purpose host behavior (no IO)" kind="section" tags="kernel,root,primitives"
 
 export type KernelResult = {
   readonly state: KernelState;
   readonly effects: readonly KernelEffect[];
 };
-
-function persistEffect(state: KernelState): KernelEffect {
-  return { type: "PERSIST_STATE", state };
-}
-
-function logEffect(
-  level: "debug" | "info" | "warn" | "error",
-  message: string,
-  data?: unknown
-): KernelEffect {
-  return { type: "LOG", level, message, data };
-}
-
-function nextStateOrReject(prev: KernelState, next: KernelState, effects: KernelEffect[]): KernelResult {
-  const res = validateState(next);
-  if (!res.ok) {
-    return {
-      state: prev,
-      effects: [...effects, logEffect("error", "kernel transition rejected by invariants", { errors: res.error })],
-    };
-  }
-  return { state: next, effects: [...effects, persistEffect(next)] };
-}
 
 /**
  * Registry boundary type-erasure:
@@ -56,10 +32,56 @@ function nextStateOrReject(prev: KernelState, next: KernelState, effects: Kernel
  */
 type AnyKernelModule = KernelModule<KernelEvent, any>;
 
+function persistEffect(state: KernelState): KernelEffect {
+  return { type: "KERNEL_PERSIST_STATE", state };
+}
+
+function reportErrorEffect(message: string, state: KernelState): KernelEffect {
+  return { type: "KERNEL_REPORT_ERROR", message, state };
+}
+
+function emitEventEffect(event: KernelEvent): KernelEffect {
+  return { type: "KERNEL_EMIT_EVENT", event };
+}
+
+function notifyModuleUpdatedEffect(moduleId: string, state: KernelState): KernelEffect {
+  return {
+    type: "KERNEL_NOTIFY_MODULE_UPDATED",
+    moduleId: moduleId as any,
+    state,
+  };
+}
+
+function nextStateOrReject(
+  prev: KernelState,
+  next: KernelState,
+  effects: KernelEffect[],
+): KernelResult {
+  const res = validateState(next);
+
+  if (!res.ok) {
+    return {
+      state: prev,
+      effects: [
+        ...effects,
+        reportErrorEffect(
+          `kernel transition rejected by invariants: ${res.error.join("; ")}`,
+          prev,
+        ),
+      ],
+    };
+  }
+
+  return {
+    state: next,
+    effects: [...effects, persistEffect(next)],
+  };
+}
+
 function applyKernelModules(
   state: KernelState,
   event: KernelEvent,
-  modules: readonly AnyKernelModule[]
+  modules: readonly AnyKernelModule[],
 ): KernelState {
   if (modules.length === 0) return state;
 
@@ -68,25 +90,43 @@ function applyKernelModules(
       ? (state.modulesById as Record<string, unknown>)
       : {};
 
-  const prevModuleOrder = Array.isArray((state as any).moduleOrder) ? ((state as any).moduleOrder as string[]) : [];
+  const prevModuleOrder = Array.isArray(state.moduleOrder)
+    ? [...state.moduleOrder]
+    : [];
 
   const nextModulesById: Record<string, unknown> = { ...prevModulesById };
-  const nextModuleOrder: string[] = [...prevModuleOrder];
+  const nextModuleOrder = [...prevModuleOrder];
 
   for (const mod of modules) {
     const moduleKey = String(mod.id);
 
-    const prevSlice = moduleKey in nextModulesById ? (nextModulesById[moduleKey] as any) : mod.initSlice(event.at);
+    const prevSlice =
+      moduleKey in nextModulesById
+        ? (nextModulesById[moduleKey] as any)
+        : mod.initSlice(event.at);
+
     const nextSlice = mod.reduce(prevSlice, event);
 
     nextModulesById[moduleKey] = nextSlice;
-    if (!nextModuleOrder.includes(moduleKey)) nextModuleOrder.push(moduleKey);
+
+    if (!nextModuleOrder.some((existingId) => String(existingId) === moduleKey)) {
+      nextModuleOrder.push(mod.id);
+    }
   }
 
-  return { ...state, modulesById: nextModulesById, moduleOrder: nextModuleOrder };
+  return {
+    ...state,
+    modulesById: nextModulesById,
+    moduleOrder: nextModuleOrder,
+    lastUpdatedAt: event.at,
+  };
 }
 
-function initKernelModulesAtTime(state: KernelState, now: ISODateString, modules: readonly AnyKernelModule[]): KernelState {
+function initKernelModulesAtTime(
+  state: KernelState,
+  now: ISODateString,
+  modules: readonly AnyKernelModule[],
+): KernelState {
   if (modules.length === 0) return state;
 
   const prevModulesById =
@@ -94,32 +134,57 @@ function initKernelModulesAtTime(state: KernelState, now: ISODateString, modules
       ? (state.modulesById as Record<string, unknown>)
       : {};
 
-  const prevModuleOrder = Array.isArray((state as any).moduleOrder) ? ((state as any).moduleOrder as string[]) : [];
+  const prevModuleOrder = Array.isArray(state.moduleOrder)
+    ? [...state.moduleOrder]
+    : [];
 
   const nextModulesById: Record<string, unknown> = { ...prevModulesById };
-  const nextModuleOrder: string[] = [...prevModuleOrder];
+  const nextModuleOrder = [...prevModuleOrder];
 
   for (const mod of modules) {
     const moduleKey = String(mod.id);
-    if (!(moduleKey in nextModulesById)) nextModulesById[moduleKey] = mod.initSlice(now);
-    if (!nextModuleOrder.includes(moduleKey)) nextModuleOrder.push(moduleKey);
+
+    if (!(moduleKey in nextModulesById)) {
+      nextModulesById[moduleKey] = mod.initSlice(now);
+    }
+
+    if (!nextModuleOrder.some((existingId) => String(existingId) === moduleKey)) {
+      nextModuleOrder.push(mod.id);
+    }
   }
 
-  return { ...state, modulesById: nextModulesById, moduleOrder: nextModuleOrder };
+  return {
+    ...state,
+    modulesById: nextModulesById,
+    moduleOrder: nextModuleOrder,
+    lastUpdatedAt: now,
+  };
 }
 
-// Template baseline: no event-driven effect planning by default.
-function planEffectsFromEvents(_events: readonly KernelEvent[]): KernelEffect[] {
-  return [];
+function planEffectsFromEvents(
+  state: KernelState,
+  events: readonly KernelEvent[],
+): KernelEffect[] {
+  const effects: KernelEffect[] = [];
+
+  for (const event of events) {
+    effects.push(emitEventEffect(event));
+
+    if (event.moduleId !== null) {
+      effects.push(notifyModuleUpdatedEffect(String(event.moduleId), state));
+    }
+  }
+
+  return effects;
 }
 
-// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.PRIMITIVES.001"
+// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.PRIMITIVES.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.HELPERS.001" intent="Helpers: intentionally empty; transition logic lives in transforms slice" kind="section" tags="kernel,root,helpers"
+// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.HELPERS.002" intent="Helpers: intentionally empty; transition logic lives in transforms slice" kind="section" tags="kernel,root,helpers"
 // (none)
-// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.HELPERS.001"
+// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.HELPERS.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.COMPOSITION.001" intent="Composition: public kernel functions (init + reducer) composed from slices" kind="section" tags="kernel,root,composition"
+// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.COMPOSITION.002" intent="Composition: public kernel functions (init + reducer) composed from general-purpose host slices" kind="section" tags="kernel,root,composition"
 
 const KERNEL_MODULES: readonly AnyKernelModule[] = [];
 
@@ -129,36 +194,41 @@ export function makeKernelInitialState(now: ISODateString): KernelState {
 }
 
 export function applyAction(state: KernelState, action: KernelAction): KernelResult {
-  const { nextState: nextStateFromTransform, events } = applyKernelActionTransform(state, action);
+  const { nextState: nextStateFromTransform, events } = applyKernelActionTransform(
+    state,
+    action,
+  );
 
   let nextState = nextStateFromTransform;
-  for (const ev of events) {
-    nextState = applyKernelModules(nextState, ev, KERNEL_MODULES);
+
+  for (const event of events) {
+    nextState = applyKernelModules(nextState, event, KERNEL_MODULES);
   }
 
-  const planned = planEffectsFromEvents(events);
+  const planned = planEffectsFromEvents(nextState, events);
   return nextStateOrReject(state, nextState, planned);
 }
 
 export function applyEvent(
   state: KernelState,
   event: KernelEvent,
-  modules: readonly AnyKernelModule[] = KERNEL_MODULES
+  modules: readonly AnyKernelModule[] = KERNEL_MODULES,
 ): KernelResult {
   const nextState = applyKernelModules(state, event, modules);
-  return nextStateOrReject(state, nextState, []);
+  const planned = planEffectsFromEvents(nextState, [event]);
+  return nextStateOrReject(state, nextState, planned);
 }
 
-// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.COMPOSITION.001"
+// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.COMPOSITION.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.EXPORTS.001" intent="Exports: explicit public surface for kernel root" kind="section" tags="kernel,root,exports"
+// MDV_BLOCK:BEGIN id="KERNEL.ROOT.SECTION.EXPORTS.002" intent="Exports: explicit public surface for kernel root" kind="section" tags="kernel,root,exports"
 
 export type { KernelAction } from "./actions";
 export type { KernelEffect } from "./effects";
 export type { KernelState } from "./types";
-export type { KernelEvent } from "./events";
+export type { KernelEvent } from "./types";
 export type { KernelModule } from "./types";
 
-// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="KERNEL.ROOT.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="KERNEL.ROOT.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/jon-orchestrator/src/kernel/kernel.ts file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/kernel/kernel.ts
+// MDV_BLOCK:END id="KERNEL.ROOT.FILE.002"

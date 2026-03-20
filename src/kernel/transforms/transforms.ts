@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.FILE.001", intent="Kernel transforms slice: pure state transition logic for v0.1 actions (no side effects)", kind="file", tags="kernel,transforms,v0.1,sections"
+// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.FILE.002" intent="Kernel transforms slice: pure state transition logic for general-purpose kernel hosting actions (no side effects)" kind="file" tags="kernel,transforms,general-purpose,v0.2,sections"
 
 /**
  * kernel/transforms/transforms.ts
@@ -14,43 +14,116 @@
  */
 
 import type { KernelAction } from "../actions";
-import type { KernelEvent } from "../events";
-import type { KernelState } from "../types";
+import type { KernelEvent, KernelModuleId, KernelState } from "../types";
 
-// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.PRIMITIVES.001", intent="Primitives: minimal pure transform helpers for immutable KernelState updates", kind="section", tags="kernel,transforms,primitives"
+// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.PRIMITIVES.002" intent="Primitives: minimal pure transform helpers for immutable general-purpose KernelState updates" kind="section" tags="kernel,transforms,primitives"
 
 export type TransformResult = {
   readonly nextState: KernelState;
   readonly events: readonly KernelEvent[];
 };
 
-// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.PRIMITIVES.001"
+// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.PRIMITIVES.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.HELPERS.001", intent="Helpers: intentionally minimal; used only to reduce repeated immutable update patterns", kind="section", tags="kernel,transforms,helpers"
+// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.HELPERS.002" intent="Helpers: intentionally minimal; used only to reduce repeated immutable update patterns" kind="section" tags="kernel,transforms,helpers"
 
 function unreachable(x: never): never {
   throw new Error(`Unhandled KernelAction: ${String(x)}`);
 }
 
-// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.HELPERS.001"
+function moduleOrderIncludes(
+  moduleOrder: readonly KernelModuleId[],
+  moduleId: KernelModuleId,
+): boolean {
+  return moduleOrder.some((existingId) => String(existingId) === String(moduleId));
+}
 
-// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.COMPOSITION.001", intent="Composition: action-specific pure transforms returning next KernelState", kind="section", tags="kernel,transforms,composition"
+// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.HELPERS.002"
 
-export function applyKernelActionTransform(state: KernelState, action: KernelAction): TransformResult {
-  // Template baseline: no domain transitions defined.
-  // Downstream projects should implement their own action->state logic here.
+// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.COMPOSITION.002" intent="Composition: action-specific pure transforms returning next KernelState for general-purpose kernel hosting" kind="section" tags="kernel,transforms,composition"
+
+export function applyKernelActionTransform(
+  state: KernelState,
+  action: KernelAction,
+): TransformResult {
   switch (action.type) {
+    case "KERNEL_SET_STATUS":
+      return {
+        nextState: {
+          ...state,
+          status: action.status,
+          lastUpdatedAt: action.now,
+        },
+        events: [],
+      };
+
+    case "KERNEL_SET_ACTIVE_MODULE":
+      return {
+        nextState: {
+          ...state,
+          activeModuleId: action.moduleId,
+          lastUpdatedAt: action.now,
+        },
+        events: [],
+      };
+
+    case "KERNEL_REGISTER_MODULE":
+      return {
+        nextState: {
+          ...state,
+          modulesById: {
+            ...state.modulesById,
+            [String(action.moduleId)]:
+              state.modulesById[String(action.moduleId)] ?? null,
+          },
+          moduleOrder: moduleOrderIncludes(state.moduleOrder, action.moduleId)
+            ? state.moduleOrder
+            : [...state.moduleOrder, action.moduleId],
+          lastUpdatedAt: action.now,
+        },
+        events: [],
+      };
+
+    case "KERNEL_RECORD_ERROR":
+      return {
+        nextState: {
+          ...state,
+          status: "error",
+          lastError: action.message,
+          lastUpdatedAt: action.now,
+        },
+        events: [],
+      };
+
+    case "KERNEL_APPEND_LOG":
+      return {
+        nextState: {
+          ...state,
+          lastUpdatedAt: action.now,
+        },
+        events: [],
+      };
+
+    case "KERNEL_DISPATCH_EVENT":
+      return {
+        nextState: {
+          ...state,
+          lastUpdatedAt: action.now,
+        },
+        events: [action.event],
+      };
+
     default:
       return unreachable(action as never);
   }
 }
 
-// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.COMPOSITION.001"
+// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.COMPOSITION.002"
 
-// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.EXPORTS.001", intent="Exports: explicit public surface for transforms slice", kind="section", tags="kernel,transforms,exports"
+// MDV_BLOCK:BEGIN id="KERNEL.TRANSFORMS.SECTION.EXPORTS.002" intent="Exports: explicit public surface for transforms slice" kind="section" tags="kernel,transforms,exports"
 
 // NOTE: exports are defined inline above (applyKernelActionTransform).
 
-// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.EXPORTS.001"
+// MDV_BLOCK:END id="KERNEL.TRANSFORMS.SECTION.EXPORTS.002"
 
-// MDV_BLOCK:END id="KERNEL.TRANSFORMS.FILE.001" file:///private/var/mobile/Containers/Shared/AppGroup/263FEE62-64EA-4A9C-8E3E-BB7133B03E55/File%20Provider%20Storage/Repositories/Kernel_based_template/src/kernel/transforms/transforms.ts
+// MDV_BLOCK:END id="KERNEL.TRANSFORMS.FILE.002"
