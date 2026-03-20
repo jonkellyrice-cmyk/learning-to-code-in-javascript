@@ -1,4 +1,4 @@
-// MDV_BLOCK:BEGIN id="UI.FILE.003" intent="UI boundary: general-purpose engine-driven UI for planner/modeler/builder module host with initial real Type Maker support" kind="file" tags="ui,general-purpose,v0.3,sections"
+// MDV_BLOCK:BEGIN id="UI.FILE.004" intent="UI boundary: general-purpose engine-driven UI for planner/modeler/builder module host with fuller Type Maker support" kind="file" tags="ui,general-purpose,v0.4,sections"
 
 /**
  * ui/ui.tsx
@@ -20,7 +20,7 @@ import {
 } from "@/engine";
 import type { KernelState } from "@/kernel";
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.PRIMITIVES.003" intent="Primitives: minimal UI primitives for time, boot, module open, placeholder module-step execution, and simple Type Maker interaction" kind="section" tags="ui,primitives"
+// MDV_BLOCK:BEGIN id="UI.SECTION.PRIMITIVES.004" intent="Primitives: minimal UI primitives for time, boot, module open, module step execution, and fuller Type Maker interaction" kind="section" tags="ui,primitives"
 
 type AppViewState = {
   readonly kernelState: KernelState | null;
@@ -30,23 +30,50 @@ type AppViewState = {
   readonly isBooting: boolean;
 };
 
+type TypeMakerField = {
+  readonly name?: string;
+  readonly valueType?: string;
+  readonly cardinality?: string;
+  readonly optional?: boolean;
+};
+
 type TypeMakerSlice = {
   readonly currentDraft?: {
     readonly name?: string;
     readonly section?: string;
-    readonly fields?: readonly unknown[];
+    readonly fields?: readonly TypeMakerField[];
   };
   readonly generatedCode?: string;
   readonly lastValidationErrors?: readonly string[];
+};
+
+type TypeMakerFieldFormState = {
+  readonly name: string;
+  readonly valueType: "string" | "number" | "boolean" | "unknown" | "null";
+  readonly cardinality: "single" | "array";
+  readonly optional: boolean;
 };
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-// MDV_BLOCK:END id="UI.SECTION.PRIMITIVES.003"
+const TYPE_FIELD_VALUE_OPTIONS = [
+  "string",
+  "number",
+  "boolean",
+  "unknown",
+  "null",
+] as const;
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.HELPERS.003" intent="Helpers: intentionally minimal UI helpers for rendering kernel and Type Maker state" kind="section" tags="ui,helpers"
+const TYPE_FIELD_CARDINALITY_OPTIONS = [
+  "single",
+  "array",
+] as const;
+
+// MDV_BLOCK:END id="UI.SECTION.PRIMITIVES.004"
+
+// MDV_BLOCK:BEGIN id="UI.SECTION.HELPERS.004" intent="Helpers: intentionally minimal UI helpers for rendering kernel and Type Maker state" kind="section" tags="ui,helpers"
 
 function statusLabel(state: KernelState | null): string {
   if (!state) return "uninitialized";
@@ -58,9 +85,9 @@ function getTypeMakerSlice(state: KernelState | null): TypeMakerSlice | null {
   return (state.modulesById["type-maker"] as TypeMakerSlice | undefined) ?? null;
 }
 
-// MDV_BLOCK:END id="UI.SECTION.HELPERS.003"
+// MDV_BLOCK:END id="UI.SECTION.HELPERS.004"
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.COMPOSITION.003" intent="Composition: main UI component for planner/modeler/builder engine host with initial real Type Maker panel" kind="section" tags="ui,composition"
+// MDV_BLOCK:BEGIN id="UI.SECTION.COMPOSITION.004" intent="Composition: main UI component for planner/modeler/builder engine host with fuller real Type Maker panel" kind="section" tags="ui,composition"
 
 export function AppUI(): JSX.Element {
   const [viewState, setViewState] = useState<AppViewState>({
@@ -69,6 +96,13 @@ export function AppUI(): JSX.Element {
     activeModuleName: null,
     message: "Booting engine…",
     isBooting: true,
+  });
+
+  const [typeMakerFieldForm, setTypeMakerFieldForm] = useState<TypeMakerFieldFormState>({
+    name: "",
+    valueType: "string",
+    cardinality: "single",
+    optional: false,
   });
 
   useEffect(() => {
@@ -113,6 +147,7 @@ export function AppUI(): JSX.Element {
       registeredModuleCount: viewState.kernelState?.moduleOrder.length ?? 0,
       typeMakerDraftName: typeMakerSlice?.currentDraft?.name ?? "",
       typeMakerSection: typeMakerSlice?.currentDraft?.section ?? "composition",
+      typeMakerFields: typeMakerSlice?.currentDraft?.fields ?? [],
       typeMakerGeneratedCode: typeMakerSlice?.generatedCode ?? "",
       typeMakerValidationErrors: typeMakerSlice?.lastValidationErrors ?? [],
     };
@@ -157,6 +192,52 @@ export function AppUI(): JSX.Element {
       activeModuleName: response.activeModuleName,
       message: response.message,
       isBooting: false,
+    });
+  }
+
+  async function handleTypeNameChange(value: string): Promise<void> {
+    await handleRunModuleStep("type-maker", {
+      type: "TYPEGEN_SET_DRAFT_NAME",
+      now: nowIso(),
+      name: value,
+    });
+  }
+
+  async function handleTypeSectionChange(value: string): Promise<void> {
+    await handleRunModuleStep("type-maker", {
+      type: "TYPEGEN_SET_DRAFT_SECTION",
+      now: nowIso(),
+      section: value,
+    });
+  }
+
+  async function handleAddTypeField(): Promise<void> {
+    if (!typeMakerFieldForm.name.trim()) return;
+
+    await handleRunModuleStep("type-maker", {
+      type: "TYPEGEN_ADD_FIELD",
+      now: nowIso(),
+      field: {
+        name: typeMakerFieldForm.name,
+        valueType: typeMakerFieldForm.valueType,
+        cardinality: typeMakerFieldForm.cardinality,
+        optional: typeMakerFieldForm.optional,
+      },
+    });
+
+    setTypeMakerFieldForm({
+      name: "",
+      valueType: "string",
+      cardinality: "single",
+      optional: false,
+    });
+  }
+
+  async function handleRemoveTypeField(fieldName: string): Promise<void> {
+    await handleRunModuleStep("type-maker", {
+      type: "TYPEGEN_REMOVE_FIELD",
+      now: nowIso(),
+      fieldName,
     });
   }
 
@@ -251,7 +332,9 @@ export function AppUI(): JSX.Element {
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => void handleOpenModule(mod.name)}>Open</button>
+                <button onClick={() => void handleOpenModule(mod.name)}>
+                  Open
+                </button>
 
                 <button onClick={() => void handleRunModuleStep(mod.name)}>
                   Run Placeholder Step
@@ -269,29 +352,205 @@ export function AppUI(): JSX.Element {
             borderRadius: 8,
             padding: 12,
             display: "grid",
-            gap: 12,
+            gap: 16,
           }}
         >
           <div style={{ fontWeight: 600 }}>Type Maker</div>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Type Name</span>
-            <input
-              value={viewModel.typeMakerDraftName}
-              onChange={(event) =>
-                void handleRunModuleStep("type-maker", {
-                  type: "TYPEGEN_SET_DRAFT_NAME",
-                  now: nowIso(),
-                  name: event.target.value,
-                })
-              }
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "1fr 220px",
+              alignItems: "end",
+            }}
+          >
+            <label style={{ display: "grid", gap: 6 }}>
+              <span>Type Name</span>
+              <input
+                value={viewModel.typeMakerDraftName}
+                onChange={(event) => void handleTypeNameChange(event.target.value)}
+                style={{
+                  padding: 8,
+                  border: "1px solid #d0d7de",
+                  borderRadius: 6,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span>Section</span>
+              <select
+                value={viewModel.typeMakerSection}
+                onChange={(event) => void handleTypeSectionChange(event.target.value)}
+                style={{
+                  padding: 8,
+                  border: "1px solid #d0d7de",
+                  borderRadius: 6,
+                }}
+              >
+                <option value="primitives">primitives</option>
+                <option value="helpers">helpers</option>
+                <option value="composition">composition</option>
+              </select>
+            </label>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #d0d7de",
+              borderRadius: 8,
+              padding: 12,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>Add Property</div>
+
+            <div
               style={{
-                padding: 8,
-                border: "1px solid #d0d7de",
-                borderRadius: 6,
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "1.4fr 1fr 1fr auto auto",
+                alignItems: "end",
               }}
-            />
-          </label>
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Name</span>
+                <input
+                  value={typeMakerFieldForm.name}
+                  onChange={(event) =>
+                    setTypeMakerFieldForm((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                    }))
+                  }
+                  style={{
+                    padding: 8,
+                    border: "1px solid #d0d7de",
+                    borderRadius: 6,
+                  }}
+                />
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Type</span>
+                <select
+                  value={typeMakerFieldForm.valueType}
+                  onChange={(event) =>
+                    setTypeMakerFieldForm((prev) => ({
+                      ...prev,
+                      valueType: event.target.value as TypeMakerFieldFormState["valueType"],
+                    }))
+                  }
+                  style={{
+                    padding: 8,
+                    border: "1px solid #d0d7de",
+                    borderRadius: 6,
+                  }}
+                >
+                  {TYPE_FIELD_VALUE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Cardinality</span>
+                <select
+                  value={typeMakerFieldForm.cardinality}
+                  onChange={(event) =>
+                    setTypeMakerFieldForm((prev) => ({
+                      ...prev,
+                      cardinality: event.target.value as TypeMakerFieldFormState["cardinality"],
+                    }))
+                  }
+                  style={{
+                    padding: 8,
+                    border: "1px solid #d0d7de",
+                    borderRadius: 6,
+                  }}
+                >
+                  {TYPE_FIELD_CARDINALITY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  paddingBottom: 10,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={typeMakerFieldForm.optional}
+                  onChange={(event) =>
+                    setTypeMakerFieldForm((prev) => ({
+                      ...prev,
+                      optional: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Optional</span>
+              </label>
+
+              <button onClick={() => void handleAddTypeField()}>
+                Add Property
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontWeight: 600 }}>
+              Properties ({viewModel.typeMakerFields.length})
+            </div>
+
+            {viewModel.typeMakerFields.length === 0 ? (
+              <div style={{ opacity: 0.75 }}>No properties yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {viewModel.typeMakerFields.map((field) => (
+                  <div
+                    key={field.name ?? Math.random()}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      border: "1px solid #d0d7de",
+                      borderRadius: 8,
+                      padding: 10,
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 2 }}>
+                      <div style={{ fontWeight: 600 }}>{field.name ?? "(unnamed)"}</div>
+                      <div style={{ fontSize: 14, opacity: 0.8 }}>
+                        type: {field.valueType ?? "unknown"} • cardinality:{" "}
+                        {field.cardinality ?? "single"} • optional:{" "}
+                        {field.optional ? "yes" : "no"}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        void handleRemoveTypeField(field.name ?? "")
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -350,13 +609,13 @@ export function AppUI(): JSX.Element {
   );
 }
 
-// MDV_BLOCK:END id="UI.SECTION.COMPOSITION.003"
+// MDV_BLOCK:END id="UI.SECTION.COMPOSITION.004"
 
-// MDV_BLOCK:BEGIN id="UI.SECTION.EXPORTS.003" intent="Exports: explicit public surface for UI domain" kind="section" tags="ui,exports"
+// MDV_BLOCK:BEGIN id="UI.SECTION.EXPORTS.004" intent="Exports: explicit public surface for UI domain" kind="section" tags="ui,exports"
 
 // NOTE: exports are defined inline above (AppUI).
 // Adapter (index.ts) controls public exposure.
 
-// MDV_BLOCK:END id="UI.SECTION.EXPORTS.003"
+// MDV_BLOCK:END id="UI.SECTION.EXPORTS.004"
 
-// MDV_BLOCK:END id="UI.FILE.003"
+// MDV_BLOCK:END id="UI.FILE.004"
