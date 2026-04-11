@@ -101,12 +101,60 @@ export type TypegenViewModel = {
 
 // helpers
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function isPascalCase(value: string): boolean {
   return /^[A-Z][A-Za-z0-9]*$/.test(value);
 }
 
 function isCamelCase(value: string): boolean {
   return /^[a-z][A-Za-z0-9]*$/.test(value);
+}
+
+function isTypegenSection(value: unknown): value is TypegenSection {
+  return (
+    value === "primitives" ||
+    value === "helpers" ||
+    value === "composition"
+  );
+}
+
+function isTypegenFieldValueType(value: unknown): value is TypegenFieldValueType {
+  return (
+    value === "string" ||
+    value === "number" ||
+    value === "boolean" ||
+    value === "unknown" ||
+    value === "null"
+  );
+}
+
+function isTypegenFieldCardinality(
+  value: unknown,
+): value is TypegenFieldCardinality {
+  return value === "single" || value === "array";
+}
+
+function isTypegenFieldDefinition(value: unknown): value is TypegenFieldDefinition {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.name === "string" &&
+    isTypegenFieldValueType(value.valueType) &&
+    isTypegenFieldCardinality(value.cardinality) &&
+    typeof value.optional === "boolean"
+  );
+}
+
+function isTypegenTypeDefinition(value: unknown): value is TypegenTypeDefinition {
+  if (!isRecord(value)) return false;
+  if (typeof value.name !== "string") return false;
+  if (!isTypegenSection(value.section)) return false;
+  if (!Array.isArray(value.fields)) return false;
+
+  return value.fields.every(isTypegenFieldDefinition);
 }
 
 function fieldTypeToCode(
@@ -146,10 +194,41 @@ function validateDuplicateFieldNames(
       errors.push(`Duplicate field name: ${field.name}`);
       continue;
     }
+
     seen.add(field.name);
   }
 
   return errors;
+}
+
+export function isTypegenCommand(value: unknown): value is TypegenCommand {
+  if (!isRecord(value)) return false;
+  if (typeof value.type !== "string") return false;
+  if (typeof value.now !== "string") return false;
+
+  switch (value.type) {
+    case "TYPEGEN_SET_DRAFT_NAME":
+      return typeof value.name === "string";
+
+    case "TYPEGEN_SET_DRAFT_SECTION":
+      return isTypegenSection(value.section);
+
+    case "TYPEGEN_ADD_FIELD":
+      return isTypegenFieldDefinition(value.field);
+
+    case "TYPEGEN_REMOVE_FIELD":
+      return typeof value.fieldName === "string";
+
+    case "TYPEGEN_REPLACE_DRAFT":
+      return isTypegenTypeDefinition(value.draft);
+
+    case "TYPEGEN_VALIDATE":
+    case "TYPEGEN_RENDER":
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 // composition
@@ -367,6 +446,19 @@ export function handleTypegenCommand(
   }
 }
 
+export function handleTypegenModuleCommand(
+  state: TypegenDraftState,
+  command: unknown,
+): TypegenHandleResult {
+  if (!isTypegenCommand(command)) {
+    return {
+      nextState: state,
+    };
+  }
+
+  return handleTypegenCommand(state, command);
+}
+
 export function selectTypegenDraft(state: TypegenDraftState): TypegenTypeDefinition {
   return state.currentDraft;
 }
@@ -403,7 +495,7 @@ export const TYPEGEN_MODULE = {
   description: TYPEGEN_MODULE_DESCRIPTION,
   status: TYPEGEN_MODULE_STATUS,
   makeInitialState: makeInitialTypegenState,
-  handleCommand: handleTypegenCommand,
+  handleCommand: handleTypegenModuleCommand,
   selectViewModel: selectTypegenViewModel,
 } as const;
 
